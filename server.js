@@ -85,7 +85,7 @@ function addToConversationHistory(role, message) {
 }
 
 async function makeRequestThroughProxy(url) {
-  const proxyAgent = new HttpsProxyAgent('http://97.77.104.22:3128');
+  const proxyAgent = new HttpsProxyAgent('https://archivebackend-bdf93cdd1c16.herokuapp.com/');
 
   try {
       const response = await axios.get(url, { httpsAgent: proxyAgent });
