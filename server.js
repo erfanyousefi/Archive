@@ -1,12 +1,15 @@
 require('dotenv').config();
 const express = require('express');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 const axios = require('axios');
 const cors = require('cors');
 
 const app = express()
 app.use(cors());
 
-const port = process.env.PORT || 8080;
+app.set('trust proxy', true);
+
+const port = process.env.PORT || 8081;
 
 app.use(express.json());
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -92,10 +95,20 @@ function generateSalesConversationPrompt(userQuery) {
 
 app.get('/api/conversation-history', (req, res) => {
   res.json({ history: conversationHistory });
-}); //made changes here, added get api endpoint
+}); 
+
+
+app.use('/api', createProxyMiddleware({
+  target: 'https://archiveapp-53952ecc1091.herokuapp.com/', 
+  changeOrigin: true,
+  secure: true, 
+  pathRewrite: {
+    '^/api': '', 
+  },
+}));
+
 
 app.listen(port, '0.0.0.0', () => {
   console.log(`Server is running on port ${port}`);
   console.log('OpenAI API Key:', process.env.OPENAI_API_KEY);
-
 });
