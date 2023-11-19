@@ -10,6 +10,14 @@ app.use(cors());
 
 const port = process.env.PORT || 8081;
 
+const corsOptions = {
+  origin: 'https://archiveapp.vercel.app/',
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  credentials: true,
+  optionsSuccessStatus: 204,
+};
+
+
 app.use(express.json());
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const HUNTER_API_KEY = process.env.HUNTER_API_KEY;
@@ -116,9 +124,11 @@ app.use('/api', createProxyMiddleware({
   pathRewrite: {
   '^/api': '',
   },
-  onError: (err, req, res) => {
-  console.error('Proxy Error:', err);
-  res.status(503).json({ message: 'Proxy error occurred.', error: err });
+  onProxyRes: (proxyRes, req, res) => {
+  // Set CORS headers in the proxy response
+  res.setHeader('Access-Control-Allow-Origin', 'https://archiveapp.vercel.app/');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
   },
   }));
 
