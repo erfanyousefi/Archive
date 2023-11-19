@@ -110,13 +110,19 @@ app.get('/api/conversation-history', (req, res) => {
 });
 
 app.use('/api', createProxyMiddleware({
-  target: 'https://archivebackend-bdf93cdd1c16.herokuapp.com/', 
+  target: 'https://archiveapp-53952ecc1091.herokuapp.com/',
   changeOrigin: true,
-  secure: true, 
+  secure: true,
   pathRewrite: {
-      '^/api': '', 
+  '^/api': '',
   },
-}));
+  onError: (err, req, res) => {
+  console.error('Proxy Error:', err);
+  res.status(503).json({ message: 'Proxy error occurred.', error: err });
+  },
+  }));
+
+
 
 app.listen(port, '0.0.0.0', () => {
   console.log(`Server is running on port ${port}`);
