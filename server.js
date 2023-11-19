@@ -90,6 +90,10 @@ function generateSalesConversationPrompt(userQuery) {
   return `The following is a conversation with an AI sales assistant specializing in writing sales emails, strategizing sales, and creating sales campaigns.\n${recentHistory}\nHuman: ${userQuery}\nAI:`;
 }
 
+app.get('/api/conversation-history', (req, res) => {
+  res.json({ history: conversationHistory });
+}); //made changes here, added get api endpoint
+
 app.listen(port, '0.0.0.0', () => {
   console.log(`Server is running on port ${port}`);
   console.log('OpenAI API Key:', process.env.OPENAI_API_KEY);
