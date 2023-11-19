@@ -10,13 +10,26 @@ app.use(cors());
 
 const port = process.env.PORT || 8081;
 
-const corsOptions = {
-  origin: 'https://archiveapp.vercel.app/',
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-  credentials: true,
-  optionsSuccessStatus: 204,
-};
-
+const corsOpts = {
+  origin: '*',
+  
+  
+  
+  methods: [
+  'GET',
+  'POST',
+  ],
+  
+  
+  
+  allowedHeaders: [
+  'Content-Type',
+  ],
+  };
+  
+  
+  
+  app.use(cors(corsOpts));
 
 app.use(express.json());
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
