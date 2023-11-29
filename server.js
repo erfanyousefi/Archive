@@ -19,7 +19,20 @@ let awaitingDomain = false;
 let potentialName = '';
 let conversationHistory = [];
 
+const corsOpts = {
+  origin: "*",
+  methods: ["GET", "POST"],
+  headers: [
+    'Content-Type',
+    'Authorization',
+    'application/json',
+    'text/plain',
+    '*/*',
+  ],
+  maxAge: 3600,
+};
 
+app.use(cors(corsOpts));
 
 
 
