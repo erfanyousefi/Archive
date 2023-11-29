@@ -1,33 +1,19 @@
 require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
-const HttpsProxyAgent = require("https-proxy-agent");
 const cors = require("cors");
-const { createProxyMiddleware } = require("http-proxy-middleware");
 
 const app = express();
 app.use(cors());
 
-const port = process.env.PORT || 8081;
+const port = process.env.PORT || 8080;
 
-const corsOpts = {
-  origin: "*",
-  methods: ["GET", "POST"],
-  headers: [
-    'Content-Type',
-    'Authorization',
-    'application/json',
-    'text/plain',
-    '*/*',
-  ],
-  maxAge: 3600,
-};
-
-app.use(cors(corsOpts));
-
-app.use(express.json());
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const HUNTER_API_KEY = process.env.HUNTER_API_KEY;
+const SCRAPINGDOG_API_KEY = process.env.SCRAPINGDOG_API_KEY;
+
+app.use(express.json());
+app.use(express.static("public"));
 
 let awaitingDomain = false;
 let potentialName = "";
@@ -66,6 +52,26 @@ app.post("/api/query", async (req, res) => {
       } else {
         res.json({ message: "Please provide a full name in your query." });
       }
+    } else if (userWantsToSummarizeLinkedInProfile(userQuery)) {
+      const linkedInId = extractLinkedInId(userQuery);
+      if (!linkedInId) {
+        res.json({ message: "Invalid LinkedIn URL provided." });
+        return;
+      }
+
+      let profileData = await scrapeLinkedInProfile(linkedInId);
+      if (!profileData) {
+        res.json({ message: "Error scraping LinkedIn profile." });
+        return;
+      }
+
+      if (await profileIsPrivate(profileData)) {
+        res.json({ message: "This LinkedIn profile is private." });
+        return;
+      }
+
+      const summary = await summarizeProfileWithOpenAI(profileData);
+      res.json({ message: summary });
     } else {
       const conversationPrompt = generateSalesConversationPrompt(userQuery);
       const openaiResponse = await axios.post(
@@ -101,21 +107,6 @@ function addToConversationHistory(role, message) {
   }
 }
 
-async function makeRequestThroughProxy(url) {
-  const proxyAgent = new HttpsProxyAgent(
-    "https://archivebackend-bdf93cdd1c16.herokuapp.com/"
-  );
-
-  try {
-    const response = await axios.get(url, { httpsAgent: proxyAgent });
-    console.log(response.data);
-    return response.data;
-  } catch (error) {
-    console.error("Error making request through proxy:", error);
-    throw error; // Rethrow the error for further handling
-  }
-}
-
 function generateSalesConversationPrompt(userQuery) {
   const recentHistory = conversationHistory
     .slice(-20)
@@ -124,34 +115,111 @@ function generateSalesConversationPrompt(userQuery) {
   return `The following is a conversation with an AI sales assistant specializing in writing sales emails, strategizing sales, and creating sales campaigns.\n${recentHistory}\nHuman: ${userQuery}\nAI:`;
 }
 
-app.get("/api/conversation-history", (req, res) => {
-  res.json({ history: conversationHistory });
-});
+// New functions for LinkedIn profile summarization
+function userWantsToSummarizeLinkedInProfile(query) {
+  const pattern =
+    /^summarize this profile https?:\/\/[www\.]*linkedin\.com\/in\/[a-zA-Z0-9-]+/;
+  return pattern.test(query.toLowerCase());
+}
 
-app.use(
-  "/api",
-  createProxyMiddleware({
-    target: "https://archiveapp-53952ecc1091.herokuapp.com/",
-    changeOrigin: true,
-    secure: true,
-    pathRewrite: {
-      "^/api": "",
-    },
-    onProxyRes: (proxyRes, req, res) => {
-      // Set CORS headers in the proxy response
-      res.setHeader(
-        "Access-Control-Allow-Origin",
-        "*"
-      );
-      res.setHeader(
-        "Access-Control-Allow-Methods",
-        "GET,HEAD,PUT,PATCH,POST,DELETE"
-      );
-    },
-  })
-);
+function extractLinkedInId(query) {
+  const urlPattern = /(https?:\/\/[www\.]*linkedin\.com\/in\/[a-zA-Z0-9-]+)/;
+  const match = query.match(urlPattern);
+  return match ? new URL(match[0]).pathname.split("/").pop() : null;
+}
 
-app.listen(port, "0.0.0.0", () => {
+async function scrapeLinkedInProfile(linkedInId) {
+  const url = `https://api.scrapingdog.com/linkedin?api_key=${process.env.SCRAPINGDOG_API_KEY}&linkId=${linkedInId}&type=profile&private=true`;
+
+  try {
+    const response = await axios.get(url);
+    return response.data; // Return the profile data if successful
+  } catch (error) {
+    console.error("Error scraping LinkedIn profile:", error.message);
+    return null; // Return null or an error message in case of an error
+  }
+}
+
+async function profileIsPrivate(profileData) {
+  console.log("profileData:", profileData);
+
+  if (profileData && profileData.isPrivate) {
+    console.log("Profile is private:", profileData.isPrivate);
+    await new Promise((resolve) => setTimeout(resolve, 4 * 60 * 1000)); // Wait for 4 minutes
+    return true;
+  } else {
+    console.log("Profile is not private.");
+    return false;
+  }
+}
+
+async function summarizeProfileWithOpenAI(profileData) {
+  let summaryContent = "";
+
+  function addFieldToSummary(field, label) {
+    console.log(`Processing field: ${field}`); // Debug log
+    if (profileData[field]) {
+      console.log(`Data for ${field}:`, profileData[field]); // Debug log
+
+      if (
+        typeof profileData[field] === "string" &&
+        profileData[field].trim() !== ""
+      ) {
+        // For string fields
+        summaryContent += `${label}: ${profileData[field]}\n`;
+      } else if (Array.isArray(profileData[field])) {
+        // For array fields, format each item
+        summaryContent += `${label}:\n`;
+        profileData[field].forEach((item, index) => {
+          summaryContent += ` - ${formatArrayItem(item)}\n`;
+        });
+      }
+    }
+  }
+
+  // New helper function to format each item of the array fields
+  function formatArrayItem(item) {
+    // Assuming each item is an object with keys you want to summarize.
+    // Modify this function based on the actual structure of your items.
+    let formattedItem = "";
+    if (item.title) formattedItem += `Title: ${item.title}; `;
+    if (item.company) formattedItem += `Company: ${item.company}; `;
+    if (item.dateRange) formattedItem += `Date: ${item.dateRange}; `;
+    if (item.description) formattedItem += `Description: ${item.description}; `;
+    // ... add other fields as needed
+    return formattedItem;
+  }
+
+  console.log("Constructed Summary Content:", summaryContent);
+
+  if (summaryContent.trim() === "") {
+    summaryContent = "No sufficient data available to summarize.";
+  }
+
+  const prompt = `Summarize the following LinkedIn profile:\n\n${summaryContent}`;
+  console.log("Prompt sent to OpenAI:", prompt);
+
+  try {
+    const openaiResponse = await axios.post(
+      "https://api.openai.com/v1/engines/text-davinci-003/completions",
+      {
+        prompt: prompt,
+        max_tokens: 150,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+      }
+    );
+    return openaiResponse.data.choices[0].text.trim();
+  } catch (error) {
+    console.error("Error summarizing profile with OpenAI:", error.message);
+    throw new Error("Error summarizing profile with OpenAI");
+  }
+}
+
+server.listen(port, () => {
   console.log(`Server is running on port ${port}`);
   console.log("OpenAI API Key:", process.env.OPENAI_API_KEY);
 });
