@@ -1,23 +1,12 @@
-require("dotenv").config();
-const express = require("express");
-const axios = require("axios");
-const cors = require("cors");
+
+require('dotenv').config();
+const express = require('express');
+const axios = require('axios');
+const cors = require('cors');
+const https = require('https');
+
 
 const app = express();
-app.use(cors());
-
-const port = process.env.PORT || 8080;
-
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const HUNTER_API_KEY = process.env.HUNTER_API_KEY;
-const SCRAPINGDOG_API_KEY = process.env.SCRAPINGDOG_API_KEY;
-
-app.use(express.json());
-app.use(express.static("public"));
-
-let awaitingDomain = false;
-let potentialName = '';
-let conversationHistory = [];
 
 const corsOpts = {
   origin: "*",
@@ -33,6 +22,20 @@ const corsOpts = {
 };
 
 app.use(cors(corsOpts));
+const port = process.env.PORT || 8080;
+
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const HUNTER_API_KEY = process.env.HUNTER_API_KEY;
+const ISCRAPE_API_KEY = process.env.ISCRAPE_API_KEY;
+
+app.use(express.json());
+app.use(express.static('public'));
+
+let awaitingDomain = false;
+let potentialName = '';
+let conversationHistory = [];
+
+
 
 
 
@@ -69,26 +72,6 @@ app.post('/api/query', async (req, res) => {
       } else {
         res.json({ message: 'Please summarize a LinkedIn profile first.' });
       }
-    } else if (userWantsToSummarizeLinkedInProfile(userQuery)) {
-      const linkedInId = extractLinkedInId(userQuery);
-      if (!linkedInId) {
-        res.json({ message: "Invalid LinkedIn URL provided." });
-        return;
-      }
-
-      let profileData = await scrapeLinkedInProfile(linkedInId);
-      if (!profileData) {
-        res.json({ message: "Error scraping LinkedIn profile." });
-        return;
-      }
-
-      if (await profileIsPrivate(profileData)) {
-        res.json({ message: "This LinkedIn profile is private." });
-        return;
-      }
-
-      const summary = await summarizeProfileWithOpenAI(profileData);
-      res.json({ message: summary });
     } else {
       // Logic for handling other types of queries
       const conversationPrompt = generateSalesConversationPrompt(userQuery);
@@ -127,7 +110,7 @@ let lastLinkedInSummary = '';
 
 // New function to generate sales email content
 async function generateSalesEmail(linkedInSummary) {
-  const prompt = `Create a personalized sales email based on the following LinkedIn profile summary.:\n\n${linkedInSummary}. Keep the email short and condensed`;
+  const prompt = `Create a personalized sales email based on the following LinkedIn profile summary \n\n${linkedInSummary}`;
   
   try {
     const openaiResponse = await axios.post(
@@ -178,93 +161,96 @@ function generateSalesConversationPrompt(userQuery) {
   return `The following is a conversation with an AI sales assistant specializing in writing sales emails, strategizing sales, and creating sales campaigns.\n${recentHistory}\nHuman: ${userQuery}\nAI:`;
 }
 
-// New functions for LinkedIn profile summarization
 function userWantsToSummarizeLinkedInProfile(query) {
-  const pattern =
-    /^summarize this profile https?:\/\/[www\.]*linkedin\.com\/in\/[a-zA-Z0-9-]+/;
+  const pattern = /^summarize this profile https?:\/\/[www\.]*linkedin\.com\/in\/[a-zA-Z0-9-]+/;
   return pattern.test(query.toLowerCase());
 }
 
 function extractLinkedInId(query) {
   const urlPattern = /(https?:\/\/[www\.]*linkedin\.com\/in\/[a-zA-Z0-9-]+)/;
   const match = query.match(urlPattern);
-  return match ? new URL(match[0]).pathname.split("/").pop() : null;
+  return match ? new URL(match[0]).pathname.split('/').pop() : null;
 }
 
-async function scrapeLinkedInProfile(linkedInId) {
-  const url = `https://api.scrapingdog.com/linkedin?api_key=${process.env.SCRAPINGDOG_API_KEY}&linkId=${linkedInId}&type=profile&private=true`;
-
+async function scrapeLinkedInProfile(linkedInId, profileType = 'personal') {
+  const url = 'https://api.iscraper.io/v2/profile-details'; // Replace with the actual endpoint of iscraper
+  const agent = new https.Agent({  
+    rejectUnauthorized: false // Bypass SSL certificate verification (use only for debugging)
+  });
   try {
-    const response = await axios.get(url);
+    const response = await axios.post(url, {
+      profile_id: linkedInId,
+      profile_type: profileType,
+      bypass_cache: false,  // Set true if you need real-time data
+      related_profiles: false,
+      network_info: true,
+      contact_info: false
+    }, {
+      headers: {
+        'X-API-KEY': ISCRAPE_API_KEY
+      }
+    });
     return response.data; // Return the profile data if successful
   } catch (error) {
-    console.error("Error scraping LinkedIn profile:", error.message);
+    console.error("Error scraping LinkedIn profile with iscraper:", error.message);
     return null; // Return null or an error message in case of an error
   }
 }
 
-async function profileIsPrivate(profileData) {
-  console.log("profileData:", profileData);
 
-  if (profileData && profileData.isPrivate) {
-    console.log("Profile is private:", profileData.isPrivate);
-    await new Promise((resolve) => setTimeout(resolve, 4 * 60 * 1000)); // Wait for 4 minutes
-    return true;
-  } else {
-    console.log("Profile is not private.");
-    return false;
-  }
-}
+
+
+
+
+
+
+
+
+
+
+
+
 
 async function summarizeProfileWithOpenAI(profileData) {
-  let summaryContent = "";
+  let summaryContent = '';
 
+  // Function to add any field with data to the summary
   function addFieldToSummary(field, label) {
-    console.log(`Processing field: ${field}`); // Debug log
     if (profileData[field]) {
-      console.log(`Data for ${field}:`, profileData[field]); // Debug log
+      let fieldData = profileData[field];
 
-      if (
-        typeof profileData[field] === "string" &&
-        profileData[field].trim() !== ""
-      ) {
-        // For string fields
-        summaryContent += `${label}: ${profileData[field]}\n`;
-      } else if (Array.isArray(profileData[field])) {
-        // For array fields, format each item
+      // Check if the field is a string and not empty
+      if (typeof fieldData === 'string' && fieldData.trim() !== '') {
+        summaryContent += `${label}: ${fieldData}\n`;
+      } 
+      // Check if the field is an array and not empty
+      else if (Array.isArray(fieldData) && fieldData.length > 0) {
         summaryContent += `${label}:\n`;
-        profileData[field].forEach((item, index) => {
-          summaryContent += ` - ${formatArrayItem(item)}\n`;
+        fieldData.forEach(item => {
+          summaryContent += ` - ${JSON.stringify(item)}\n`; // You might want to format this better
         });
       }
+      // Add other data types handling as needed
     }
   }
 
-  // New helper function to format each item of the array fields
-  function formatArrayItem(item) {
-    // Assuming each item is an object with keys you want to summarize.
-    // Modify this function based on the actual structure of your items.
-    let formattedItem = "";
-    if (item.title) formattedItem += `Title: ${item.title}; `;
-    if (item.company) formattedItem += `Company: ${item.company}; `;
-    if (item.dateRange) formattedItem += `Date: ${item.dateRange}; `;
-    if (item.description) formattedItem += `Description: ${item.description}; `;
-    // ... add other fields as needed
-    return formattedItem;
+  // Iterate over all keys in profileData and add them to the summary
+  for (const key in profileData) {
+    addFieldToSummary(key, key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' '));
   }
 
   console.log("Constructed Summary Content:", summaryContent);
 
-  if (summaryContent.trim() === "") {
-    summaryContent = "No sufficient data available to summarize.";
+  if (summaryContent.trim() === '') {
+    summaryContent = 'Limited data available to summarize.';
   }
 
-  const prompt = `Summarize the following LinkedIn profile:\n\n${summaryContent}`;
+  const prompt = `Summarize the following LinkedIn profile \n\n${summaryContent}. Provide a cohesive condensed summary that's grammatically accurate.`;
   console.log("Prompt sent to OpenAI:", prompt);
 
   try {
     const openaiResponse = await axios.post(
-      "https://api.openai.com/v1/engines/text-davinci-003/completions",
+      'https://api.openai.com/v1/engines/text-davinci-003/completions',
       {
         prompt: prompt,
         max_tokens: 150,
@@ -278,10 +264,11 @@ async function summarizeProfileWithOpenAI(profileData) {
     return openaiResponse.data.choices[0].text.trim();
   } catch (error) {
     console.error("Error summarizing profile with OpenAI:", error.message);
-    throw new Error("Error summarizing profile with OpenAI");
+    throw new Error('Error summarizing profile with OpenAI');
   }
 }
 
+
 server.listen(port, () => {
   console.log(`Server is running on port ${port}`);
-});
+  });
