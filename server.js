@@ -8,7 +8,7 @@ const https = require('https');
 const app = express();
 app.use(cors());
 
-const port = process.env.PORT || 8080;
+const port = process.env.PORT || 80;
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const HUNTER_API_KEY = process.env.HUNTER_API_KEY;
