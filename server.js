@@ -5,27 +5,12 @@ const axios = require('axios');
 const cors = require('cors');
 const https = require('https');
 
-
 const app = express();
 
-const corsOpts = {
-  origin: "*",
-  methods: ["GET", "POST"],
-  headers: [
-    'Content-Type',
-    'Authorization',
-    'application/json',
-    'text/plain',
-    '*/*',
-  ],
-  maxAge: 3600,
-};
-
-app.use(cors(corsOpts));
-const port = process.env.PORT || 8080;
+app.use(cors());
+port = process.env.PORT || 80;
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const HUNTER_API_KEY = process.env.HUNTER_API_KEY;
 const ISCRAPE_API_KEY = process.env.ISCRAPE_API_KEY;
 
 app.use(express.json());
@@ -34,10 +19,6 @@ app.use(express.static('public'));
 let awaitingDomain = false;
 let potentialName = '';
 let conversationHistory = [];
-
-
-
-
 
 app.post('/api/query', async (req, res) => {
   try {
@@ -197,20 +178,6 @@ async function scrapeLinkedInProfile(linkedInId, profileType = 'personal') {
   }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 async function summarizeProfileWithOpenAI(profileData) {
   let summaryContent = '';
 
@@ -268,6 +235,14 @@ async function summarizeProfileWithOpenAI(profileData) {
   }
 }
 
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  next();
+});
+
+const server = https.createServer(app);
 
 server.listen(port, () => {
   console.log(`Server is running on port ${port}`);
