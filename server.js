@@ -75,7 +75,7 @@ app.post('/api/query', async (req, res) => {
       res.json({message: botResponse}); // Send the response as JSON
     }
   } catch (error) {
-    console.error('Error:', error.response || error);
+    // console.error('Error:', error.response || error);
     res.status(500).json({message: 'An error occurred.', error: error.response || error});
   }
 });
@@ -173,8 +173,8 @@ async function scrapeLinkedInProfile (linkedInId, profileType = 'personal') {
     });
     return response.data; // Return the profile data if successful
   } catch (error) {
-    console.error("Error scraping LinkedIn profile with iscraper:", error.message);
-    return null; // Return null or an error message in case of an error
+    // console.error("Error scraping LinkedIn profile with iscraper:", error.message);
+    return "Error scraping LinkedIn profile with iscraper:" + error?.message;
   }
 }
 
