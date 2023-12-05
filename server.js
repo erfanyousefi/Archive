@@ -67,7 +67,7 @@ app.post('/api/query', async (req, res) => {
             Authorization: `Bearer ${OPENAI_API_KEY}`,
           },
         }
-      );
+      ); 
 
       const botResponse = openaiResponse.data.choices[0].text.trim();
       addToConversationHistory('Bot', botResponse);
