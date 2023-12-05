@@ -1,21 +1,18 @@
 
-require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
-const https = require('https');
-
+const http = require('http');
+require('dotenv').config();
 const app = express();
-
 app.use(cors());
-port = process.env.PORT || 80;
-
-
+port = process.env.PORT || 8000;
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const ISCRAPE_API_KEY = process.env.ISCRAPE_API_KEY;
 
 app.use(express.json());
+app.use(express.urlencoded({extended: true}));
 app.use(express.static('public'));
 
 let awaitingDomain = false;
@@ -24,36 +21,37 @@ let conversationHistory = [];
 
 app.post('/api/query', async (req, res) => {
   try {
-    const userQuery = req.body.query;
+    console.log(req.body);
+    const userQuery = req?.body?.query;
     addToConversationHistory('User', userQuery);
-
+    if (!userQuery) return res.send("Please Enter query");
     if (awaitingDomain) {
       // Existing logic for handling domain-related queries
     } else if (userWantsToSummarizeLinkedInProfile(userQuery)) {
       // Logic for summarizing LinkedIn profile
       const linkedInId = extractLinkedInId(userQuery);
       if (!linkedInId) {
-        res.json({ message: 'Invalid LinkedIn URL provided.' });
+        res.json({message: 'Invalid LinkedIn URL provided.'});
         return;
       }
 
       let profileData = await scrapeLinkedInProfile(linkedInId);
       if (!profileData) {
-        res.json({ message: 'Error scraping LinkedIn profile.' });
+        res.json({message: 'Error scraping LinkedIn profile.'});
         return;
       }
 
       const summary = await summarizeProfileWithOpenAI(profileData);
       // Store the summary for later use in generating sales email
       lastLinkedInSummary = summary;
-      res.json({ message: summary });
+      res.json({message: summary});
     } else if (userQuery.toLowerCase() === "create a sales email for this person") {
       // Logic for generating a sales email
       if (lastLinkedInSummary) {
         const salesEmailContent = await generateSalesEmail(lastLinkedInSummary);
-        res.json({ message: salesEmailContent });
+        res.json({message: salesEmailContent});
       } else {
-        res.json({ message: 'Please summarize a LinkedIn profile first.' });
+        res.json({message: 'Please summarize a LinkedIn profile first.'});
       }
     } else {
       // Logic for handling other types of queries
@@ -74,11 +72,11 @@ app.post('/api/query', async (req, res) => {
       const botResponse = openaiResponse.data.choices[0].text.trim();
       addToConversationHistory('Bot', botResponse);
 
-      res.json({ message: botResponse }); // Send the response as JSON
+      res.json({message: botResponse}); // Send the response as JSON
     }
   } catch (error) {
     console.error('Error:', error.response || error);
-    res.status(500).json({ message: 'An error occurred.', error: error.response || error });
+    res.status(500).json({message: 'An error occurred.', error: error.response || error});
   }
 });
 
@@ -92,9 +90,9 @@ let lastLinkedInSummary = '';
 
 
 // New function to generate sales email content
-async function generateSalesEmail(linkedInSummary) {
+async function generateSalesEmail (linkedInSummary) {
   const prompt = `Create a personalized sales email based on the following LinkedIn profile summary \n\n${linkedInSummary}`;
-  
+
   try {
     const openaiResponse = await axios.post(
       'https://api.openai.com/v1/engines/text-davinci-003/completions',
@@ -129,14 +127,14 @@ async function generateSalesEmail(linkedInSummary) {
 
 
 
-function addToConversationHistory(role, message) {
-  conversationHistory.push({ role, message });
+function addToConversationHistory (role, message) {
+  conversationHistory.push({role, message});
   if (conversationHistory.length > 20) {
     conversationHistory.shift();
   }
 }
 
-function generateSalesConversationPrompt(userQuery) {
+function generateSalesConversationPrompt (userQuery) {
   const recentHistory = conversationHistory
     .slice(-20)
     .map(entry => `${entry.role}: ${entry.message}`)
@@ -144,20 +142,20 @@ function generateSalesConversationPrompt(userQuery) {
   return `The following is a conversation with an AI sales assistant specializing in writing sales emails, strategizing sales, and creating sales campaigns.\n${recentHistory}\nHuman: ${userQuery}\nAI:`;
 }
 
-function userWantsToSummarizeLinkedInProfile(query) {
+function userWantsToSummarizeLinkedInProfile (query) {
   const pattern = /^summarize this profile https?:\/\/[www\.]*linkedin\.com\/in\/[a-zA-Z0-9-]+/;
   return pattern.test(query.toLowerCase());
 }
 
-function extractLinkedInId(query) {
+function extractLinkedInId (query) {
   const urlPattern = /(https?:\/\/[www\.]*linkedin\.com\/in\/[a-zA-Z0-9-]+)/;
   const match = query.match(urlPattern);
   return match ? new URL(match[0]).pathname.split('/').pop() : null;
 }
 
-async function scrapeLinkedInProfile(linkedInId, profileType = 'personal') {
+async function scrapeLinkedInProfile (linkedInId, profileType = 'personal') {
   const url = 'https://api.iscraper.io/v2/profile-details'; // Replace with the actual endpoint of iscraper
-  const agent = new https.Agent({  
+  const agent = new https.Agent({
     rejectUnauthorized: false // Bypass SSL certificate verification (use only for debugging)
   });
   try {
@@ -180,18 +178,18 @@ async function scrapeLinkedInProfile(linkedInId, profileType = 'personal') {
   }
 }
 
-async function summarizeProfileWithOpenAI(profileData) {
+async function summarizeProfileWithOpenAI (profileData) {
   let summaryContent = '';
 
   // Function to add any field with data to the summary
-  function addFieldToSummary(field, label) {
+  function addFieldToSummary (field, label) {
     if (profileData[field]) {
       let fieldData = profileData[field];
 
       // Check if the field is a string and not empty
       if (typeof fieldData === 'string' && fieldData.trim() !== '') {
         summaryContent += `${label}: ${fieldData}\n`;
-      } 
+      }
       // Check if the field is an array and not empty
       else if (Array.isArray(fieldData) && fieldData.length > 0) {
         summaryContent += `${label}:\n`;
@@ -244,8 +242,8 @@ app.use((req, res, next) => {
   next();
 });
 
-const server = https.createServer(app);
+const server = http.createServer(app);
 
 server.listen(port, () => {
   console.log(`Server is running on port ${port}`);
-  });
+});  
